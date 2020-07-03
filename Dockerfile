@@ -30,13 +30,14 @@ RUN dd bs=1024 count=2880 if=/dev/zero of=esp.img && \
 
 FROM docker.io/centos:centos8
 
-RUN dnf install -y python3 python3-requests && \
+RUN dnf install -y python3 python3-requests epel-release && \
     curl https://raw.githubusercontent.com/openstack/tripleo-repos/master/tripleo_repos/main.py | python3 - -b master current-tripleo && \
     dnf update -y && \
     dnf install -y python3-gunicorn openstack-ironic-api openstack-ironic-conductor crudini \
         iproute dnsmasq httpd qemu-img iscsi-initiator-utils parted gdisk psmisc \
         mariadb-server genisoimage python3-ironic-prometheus-exporter \
-        python3-jinja2 python3-sushy-oem-idrac python3-ibmcclient && \
+        python3-jinja2 python3-sushy-oem-idrac python3-ibmcclient mod_ssl python3-mod_wsgi \
+        inotify-tools && \
     dnf clean all && \
     rm -rf /var/cache/{yum,dnf}/*
 
@@ -49,7 +50,8 @@ COPY --from=builder /tmp/esp.img /tmp/uefi_esp.img
 
 COPY ./ironic.conf /tmp/ironic.conf
 RUN crudini --merge /etc/ironic/ironic.conf < /tmp/ironic.conf && \
-    rm /tmp/ironic.conf
+    rm /tmp/ironic.conf && chown ironic:ironic /var/log/ironic && \
+    rm /etc/httpd/conf.d/ssl.conf
 
 COPY ./runironic-api.sh /bin/runironic-api
 COPY ./runironic-conductor.sh /bin/runironic-conductor
@@ -59,6 +61,7 @@ COPY ./runhttpd.sh /bin/runhttpd
 COPY ./runmariadb.sh /bin/runmariadb
 COPY ./configure-ironic.sh /bin/configure-ironic.sh
 COPY ./ironic-common.sh /bin/ironic-common.sh
+COPY ./apache2-ironic.conf.j2 /etc/httpd-ironic.conf.j2
 
 # TODO(dtantsur): remove this script when we stop supporting running both
 # API and conductor processes via one entry point.
